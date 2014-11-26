@@ -162,8 +162,10 @@ void Weather::threadLoop(void*lpv)
 
 void Weather::addRequest(const WeatherRequest& request)
 {
+	
 	EnterCriticalSection(&WeatherCS);
-	requestWeather.push(request);
+	if (!checkData(request))
+		requestWeather.push(request);
 	LeaveCriticalSection(&WeatherCS);
 };
 
@@ -592,7 +594,7 @@ void Weather::addWeatherData(char* data, int len)
 			++it1;
 		};
 		EnterCriticalSection(&WeatherCS);
-		setWeatherData(mwd);
+		setData(mwd);
 		weatherQue.push(mwd);
 		LeaveCriticalSection(&WeatherCS);
 		SetEvent(hEvent);
@@ -701,7 +703,7 @@ void Weather::addAstroData(char* data, int len)
 			++it1;
 		};
 		EnterCriticalSection(&WeatherCS);
-		setAstroData(mad);
+		setData(mad);
 		astroQue.push(mad);
 		LeaveCriticalSection(&WeatherCS);
 		SetEvent(hEvent);
@@ -737,14 +739,54 @@ bool Weather::read(MetAstroData& mad)
 	return ret;
 };
 
-void Weather::setWeatherData(MetWeatherData& mwd)
+bool Weather::checkData(const WeatherRequest& request)
+{
+	size_t size = weatherData.size();
+	for (size_t i = 0; i < size; i++)
+	{
+		if (weatherData[i].time.size())
+		{
+			if ((weatherData[i].time[0].location.latitude == request.latitude) && (weatherData[i].time[0].location.longitude = request.longitude))
+			{
+				if (weatherData[i].model.size())
+				{
+					FILETIME now;
+					localFileTime(now);
+					if (weatherData[i].model[0].nextrun.dwHighDateTime>now.dwHighDateTime)
+					{
+						weatherQue.push(weatherData[i]);
+						SetEvent(hEvent);
+						return true;
+					}
+					else if (weatherData[i].model[0].nextrun.dwHighDateTime == now.dwHighDateTime)
+					{
+						if (weatherData[i].model[0].nextrun.dwLowDateTime >= now.dwLowDateTime)
+						{
+							weatherQue.push(weatherData[i]);
+							SetEvent(hEvent);
+							return true;
+						}
+					}
+				}
+			}
+		}
+	}
+	return false;
+}
+
+bool Weather::checkData(const AstroRequest& request)
+{
+	return false;
+}
+
+void Weather::setData(MetWeatherData& mwd)
 {
 	MetWeatherLocation ml1,ml2;
-	int size;
+	size_t size;
 	if (!mwd.getCurrentLocation(ml1))
 		return;
 	size=weatherData.size();
-	for (int i = 0; i < size;i++)
+	for (size_t i = 0; i < size;i++)
 	{
 		if (weatherData[i].getCurrentLocation(ml2))
 		{
@@ -758,14 +800,14 @@ void Weather::setWeatherData(MetWeatherData& mwd)
 	weatherData.push_back(mwd);
 }
 
-void Weather::setAstroData(MetAstroData& mad)
+void Weather::setData(MetAstroData& mad)
 {
 	MetAstroLocation ml1, ml2;
-	int size;
+	size_t size;
 	if (!mad.getCurrentLocation(ml1))
 		return;
 	size = astroData.size();
-	for (int i = 0; i < size; i++)
+	for (size_t i = 0; i < size; i++)
 	{
 		if (astroData[i].getCurrentLocation(ml2))
 		{

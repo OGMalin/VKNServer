@@ -5,6 +5,7 @@
 
 #include <Windows.h>
 #include <string>
+#include <time.h>
 
 using namespace std;
 
@@ -255,3 +256,10 @@ std::string timeToString(const FILETIME& t)
 	return timeToString(st);
 }
 
+void localFileTime(FILETIME& ft)
+{
+
+	SYSTEMTIME st;
+	GetLocalTime(&st);
+	SystemTimeToFileTime(&st, &ft);
+}

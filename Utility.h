@@ -57,3 +57,5 @@ extern bool threadRunning(HANDLE hThread);
 // Tidsfunksjoner
 extern std::string timeToString(const FILETIME& t);
 extern std::string timeToString(const SYSTEMTIME& t);
+
+extern void localFileTime(FILETIME& ft);

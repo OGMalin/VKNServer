@@ -178,34 +178,60 @@ public:
 
 class Weather
 {
-public:
 	bool abort;
-	bool debug;
 	HANDLE hThread;
+	
+	// Kø for å holde nye forespørsler til api.met.no
+	std::queue<WeatherRequest> requestWeather;
+	std::queue<AstroRequest> requestAstro;
+
+	// Kø med nye meldinger som er klar for videre behandling.
+	std::queue<MetWeatherData> weatherQue;
+	std::queue<MetAstroData> astroQue;
+
+	// Liste over siste forespørsel for vært sted.
+	std::vector<MetWeatherData> weatherData;
+	std::vector<MetAstroData> astroData;
+
+	// I bruk av threadLoop for å sjekke om det er nye avspørringer til api.met.no
+	bool getRequest(WeatherRequest& request);
+	bool getRequest(AstroRequest& request);
+
+	// Tolker nye data fra api.met.no og legger de i rett kø. Signaliserer med hEvent.
+	void addWeatherData(char* data, int len);
+	void addAstroData(char* data, int len);
+
+	// Sjekker om værprognose for dette stedet trenger å hentes på nytt.
+	bool checkData(const WeatherRequest& request);
+	bool checkData(const AstroRequest& request);
+
+	void setData(MetWeatherData& mwd);
+	void setData(MetAstroData& mad);
+
+public:
+	bool debug;
 	HANDLE hEvent;
 	std::string forecastAddress;
 	std::string astroAddress;
-	std::queue<WeatherRequest> requestWeather;
-	std::queue<AstroRequest> requestAstro;
-	std::queue<MetWeatherData> weatherQue;
-	std::queue<MetAstroData> astroQue;
-	std::vector<MetWeatherData> weatherData;
-	std::vector<MetAstroData> astroData;
+
 	Weather(HANDLE event);
 	virtual ~Weather();
 
 	static void threadLoop(void* lpv);
 
+	// Start av værinnhenting
 	bool start();
+
+	// Stopper værinnhenting
 	void stop();
-	void setWeatherData(MetWeatherData& mwd);
-	void setAstroData(MetAstroData& mad);
+
+
+	// Forespør om nye værdata for ett sted.
 	void addRequest(const WeatherRequest& request);
 	void addRequest(const AstroRequest& request);
-	bool getRequest(WeatherRequest& request);
-	bool getRequest(AstroRequest& request);
-	void addWeatherData(char* data, int len);
-	void addAstroData(char* data, int len);
+
+
+	// Leser innkomne meldinger
 	bool read(MetWeatherData& mwd);
 	bool read(MetAstroData& mad);
 };
