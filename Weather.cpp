@@ -172,7 +172,8 @@ void Weather::addRequest(const WeatherRequest& request)
 void Weather::addRequest(const AstroRequest& request)
 {
 	EnterCriticalSection(&WeatherCS);
-	requestAstro.push(request);
+	if (!checkData(request))
+		requestAstro.push(request);
 	LeaveCriticalSection(&WeatherCS);
 };
 
@@ -776,6 +777,39 @@ bool Weather::checkData(const WeatherRequest& request)
 
 bool Weather::checkData(const AstroRequest& request)
 {
+	size_t size = astroData.size();
+	for (size_t i = 0; i < size; i++)
+	{
+		if (astroData[i].time.size())
+		{
+			if ((astroData[i].time[0].location.latitude == request.latitude) && (astroData[i].time[0].location.longitude = request.longitude))
+			{
+				FILETIME now;
+				localFileTime(now);
+
+				//if (astroData[i].model.size())
+				//{
+				//	FILETIME now;
+				//	localFileTime(now);
+				//	if (weatherData[i].model[0].nextrun.dwHighDateTime>now.dwHighDateTime)
+				//	{
+				//		weatherQue.push(weatherData[i]);
+				//		SetEvent(hEvent);
+				//		return true;
+				//	}
+				//	else if (weatherData[i].model[0].nextrun.dwHighDateTime == now.dwHighDateTime)
+				//	{
+				//		if (weatherData[i].model[0].nextrun.dwLowDateTime >= now.dwLowDateTime)
+				//		{
+				//			weatherQue.push(weatherData[i]);
+				//			SetEvent(hEvent);
+				//			return true;
+				//		}
+				//	}
+				//}
+			}
+		}
+	}
 	return false;
 }
 

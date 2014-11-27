@@ -231,7 +231,8 @@ public:
 	void addRequest(const AstroRequest& request);
 
 
-	// Leser innkomne meldinger
+	/**++ Leser innkomne meldinger
+	*/
 	bool read(MetWeatherData& mwd);
 	bool read(MetAstroData& mad);
 };
