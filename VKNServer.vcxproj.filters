@@ -77,5 +77,6 @@
   </ItemGroup>
   <ItemGroup>
     <None Include="config.ini" />
+    <None Include="VKNServer.docx" />
   </ItemGroup>
 </Project>
