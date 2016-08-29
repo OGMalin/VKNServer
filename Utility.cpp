@@ -263,3 +263,50 @@ void localFileTime(FILETIME& ft)
 	GetLocalTime(&st);
 	SystemTimeToFileTime(&st, &ft);
 }
+
+const SYSTEMTIME ZuluTimeToSystemTime(const std::string& z)
+{ // 01234567890123456789
+	// CCYY-MM-DDTHH:MM:SSZ
+	SYSTEMTIME st;
+	memset(&st, 0, sizeof(SYSTEMTIME));
+	if (z.length() == 20)
+	{
+		st.wYear = atoi(z.substr(0, 4).c_str());
+		st.wMonth = atoi(z.substr(5, 2).c_str());
+		st.wDay = atoi(z.substr(8, 2).c_str());
+		st.wHour = atoi(z.substr(11, 2).c_str());
+		st.wMinute = atoi(z.substr(14, 2).c_str());
+		st.wSecond = atoi(z.substr(17, 2).c_str());
+	};
+	return st;
+};
+
+const SYSTEMTIME ZuluTimeToLocalSystemTime(const std::string& z)
+{ // 01234567890123456789
+	// CCYY-MM-DDTHH:MM:SSZ
+	TIME_ZONE_INFORMATION tzi;
+	SYSTEMTIME lst;
+	GetTimeZoneInformation(&tzi);
+	SYSTEMTIME st = ZuluTimeToSystemTime(z);
+	SystemTimeToTzSpecificLocalTime(&tzi, &st, &lst);
+	return lst;
+};
+
+const FILETIME ZuluTimeToFileTime(const std::string& z)
+{ // 01234567890123456789
+	// CCYY-MM-DDTHH:MM:SSZ
+	FILETIME ft;
+	SYSTEMTIME st = ZuluTimeToSystemTime(z);
+	SystemTimeToFileTime(&st, &ft);
+	return ft;
+};
+
+const FILETIME ZuluTimeToLocalFileTime(const std::string& z)
+{ // 01234567890123456789
+	// CCYY-MM-DDTHH:MM:SSZ
+	FILETIME ft;
+	SYSTEMTIME st = ZuluTimeToLocalSystemTime(z);
+	SystemTimeToFileTime(&st, &ft);
+	return ft;
+};
+

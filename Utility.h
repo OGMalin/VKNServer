@@ -59,3 +59,8 @@ extern std::string timeToString(const FILETIME& t);
 extern std::string timeToString(const SYSTEMTIME& t);
 
 extern void localFileTime(FILETIME& ft);
+
+extern const FILETIME ZuluTimeToFileTime(const std::string& z);
+extern const FILETIME ZuluTimeToLocalFileTime(const std::string& z);
+extern const SYSTEMTIME ZuluTimeToSystemTime(const std::string& z);
+extern const SYSTEMTIME ZuluTimeToLocalSystemTime(const std::string& z);

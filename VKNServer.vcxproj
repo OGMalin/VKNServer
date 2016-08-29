@@ -157,8 +157,6 @@
     <ClCompile Include="SNMP.cpp" />
     <ClCompile Include="SNMPManager.cpp" />
     <ClCompile Include="Utility.cpp" />
-    <ClCompile Include="Weather.cpp" />
-    <ClCompile Include="XML.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="APCI.h" />
@@ -170,8 +168,6 @@
     <ClInclude Include="SNMP.h" />
     <ClInclude Include="SNMPManager.h" />
     <ClInclude Include="Utility.h" />
-    <ClInclude Include="Weather.h" />
-    <ClInclude Include="XML.h" />
   </ItemGroup>
   <ItemGroup>
     <None Include="config.ini" />

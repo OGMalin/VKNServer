@@ -3,6 +3,7 @@
 #include <Windows.h>
 #include <iostream>
 #include <fstream>
+#include <string>
 #include <map>
 #include <stdlib.h>
 #include "Utility.h"
@@ -10,12 +11,11 @@
 #include "IEC104Slave.h"
 #include "SNMPManager.h"
 #include "SNMP.h"
-#include "weather.h"
 
 using namespace std;
 
-enum {WAIT_CONSOLE=WAIT_OBJECT_0,WAIT_104,WAIT_SNMP,WAIT_WEATHER};
-enum {CMAIN=0, C104, CSNMP, CWEATHER };
+enum {WAIT_CONSOLE=WAIT_OBJECT_0,WAIT_104,WAIT_SNMP};
+enum {CMAIN=0, C104, CSNMP};
 
 
 struct ScheduleEntry
@@ -23,6 +23,13 @@ struct ScheduleEntry
 	std::string command;
 	DWORD stime;
 	DWORD tick;
+};
+
+struct IECCommand
+{
+	int ioa;
+	int val;
+	std::string cmd;
 };
 
 struct SNMPCommand
@@ -45,50 +52,31 @@ struct SNMPResponse
 	DWORD last; // 1=feil, 0=ok, 2=oppstart
 };
 
-struct WeatherCommand
-{
-	std::string type;
-	std::string location;
-	std::string cmd;
-};
-
 struct StationMap
 {
 	std::string name;
 	std::list<DWORD> ip;
 };
 
-struct LocationMap
-{
-	std::string name;
-	double latitude;
-	double longitude;
-};
-
 Console con;
 IEC104Slave* iec104;
 SNMPManager* snmp;
-Weather* weather;
-HANDLE hEvent[4];
+HANDLE hEvent[3];
 
 int cmdsection;
 bool logging;
 bool useScheduler;
 std::string logfile;
 std::list<ScheduleEntry> scheduleQue;
+std::list<IECCommand> iecQue;
 std::list<SNMPCommand> snmpQue;
 std::list<SNMPResponse> responseQue;
 std::list<StationMap> stationList;
-std::list<LocationMap> locationList;
-std::list<WeatherCommand> weatherQue;
 
 DWORD snmpPort;
 bool snmpDebug;
 bool i104Debug;
 DWORD i104CA;
-bool weatherDebug;
-std::string forecastUrl;
-std::string astroUrl;
 
 // Liste over ip'er som krever response (alternativ til pinging)
 void response(std::string name, DWORD tick, DWORD id)
@@ -134,8 +122,6 @@ void doCommand(std::string s)
 			cmdsection=CMAIN;
 		else if (arg1=="snmp")
 			cmdsection=CSNMP;
-		else if (arg1 == "weather")
-			cmdsection = CWEATHER;
 		else if (arg1 == "..")
 			cmdsection=CMAIN;
 		return;
@@ -152,11 +138,6 @@ void doCommand(std::string s)
 	{
 		tmpsection=CSNMP;
 		cmd = lowercase(getWord(s,next++));
-	}
-	else if (cmd == "weather")
-	{
-		tmpsection = CWEATHER;
-		cmd = lowercase(getWord(s, next++));
 	}
 
 	if (tmpsection==CMAIN)
@@ -198,15 +179,6 @@ void doCommand(std::string s)
 			stationList.push_back(st);
 			return;
 		}
-		if (cmd == "location")
-		{
-			LocationMap lt;
-			lt.name = getWord(s, next++);
-			lt.latitude=atof(getWord(s, next++).c_str());
-			lt.longitude = atof(getWord(s, next++).c_str());
-			locationList.push_back(lt);
-			return;
-		}
 	}else if (tmpsection == C104)
 	{
 		if (cmd=="start")
@@ -241,7 +213,16 @@ void doCommand(std::string s)
 				iec104->commonaddress = i104CA;
 			return;
 		}
-		if (cmd=="set")
+		if (cmd == "rec")
+		{
+			IECCommand ic;
+			ic.ioa = atoi(getWord(s, next++).c_str());
+			ic.val = atoi(getWord(s, next++).c_str());
+			ic.cmd = getQuote(s);
+			iecQue.push_back(ic);
+			return;
+		}
+		if (cmd == "set")
 		{
 			if (!iec104)
 				return;
@@ -275,9 +256,10 @@ void doCommand(std::string s)
 			}
 			return;
 		}
-	}else if (tmpsection==CSNMP)
+	}
+	else if (tmpsection == CSNMP)
 	{
-		if (cmd=="start")
+		if (cmd == "start")
 		{
 			if (!snmp)
 			{
@@ -295,16 +277,16 @@ void doCommand(std::string s)
 			snmp = NULL;
 			return;
 		}
-		if (cmd=="debug")
+		if (cmd == "debug")
 		{
 			snmpDebug = booleanString(getWord(s, next++));
 			if (snmp)
 				snmp->debug = snmpDebug;
 			return;
 		}
-		if (cmd=="port")
+		if (cmd == "port")
 		{
-			arg1 = getWord(s,next++);
+			arg1 = getWord(s, next++);
 			if (isNumber(arg1, 10))
 			{
 				snmpPort = atoi(arg1.c_str());
@@ -317,22 +299,23 @@ void doCommand(std::string s)
 			}
 			return;
 		}
-		if (cmd=="get")
+		if (cmd == "get")
 		{
 			if (!snmp)
 			{
 				cout << "SNMP Manager kjørier ikke." << endl;
 				return;
 			}
-			DWORD ip=0;
-			arg1 = getWord(s,next++);
-			arg2 = getWord(s,next++);
+			DWORD ip = 0;
+			arg1 = getWord(s, next++);
+			arg2 = getWord(s, next++);
 			if (isNumber(arg1))
 			{
 				ip = atoip(arg1);
-			}else
+			}
+			else
 			{
-				list<StationMap>::iterator it=stationList.begin();
+				list<StationMap>::iterator it = stationList.begin();
 				while (it != stationList.end())
 				{
 					if (it->name == arg1)
@@ -356,127 +339,63 @@ void doCommand(std::string s)
 			response(arg1, atoi(arg2.c_str()), atoi(arg3.c_str()));
 			return;
 		}
-		if (cmd=="rec")
+		if (cmd == "rec")
 		{
 			SNMPCommand sc;
-			sc.pdu = atoi(getWord(s,next++).c_str());
+			sc.pdu = atoi(getWord(s, next++).c_str());
 			sc.station = getWord(s, next++);
-			arg1 = getWord(s,next++);
+			arg1 = getWord(s, next++);
 			switch (sc.pdu)
 			{
-				case PDU_TRAP1:
-					sc.object = getWord(arg1, 1, ":");
-					sc.generic_trap = atoi(getWord(arg1, 2, ":").c_str());
-					sc.spesific_trap = atoi(getWord(arg1, 3, ":").c_str());
-					break;
-				case PDU_GETRESPONSE:
-				case PDU_INFORMREQUEST:
-				case PDU_TRAP2:
-					sc.object = getWord(arg1, 1, ":");
-					sc.value = getWord(arg1, 2, ":");
-					break;
-				default:
-					sc.object = arg1;
-					break;
+			case PDU_TRAP1:
+				sc.object = getWord(arg1, 1, ":");
+				sc.generic_trap = atoi(getWord(arg1, 2, ":").c_str());
+				sc.spesific_trap = atoi(getWord(arg1, 3, ":").c_str());
+				break;
+			case PDU_GETRESPONSE:
+			case PDU_INFORMREQUEST:
+			case PDU_TRAP2:
+				sc.object = getWord(arg1, 1, ":");
+				sc.value = getWord(arg1, 2, ":");
+				break;
+			default:
+				sc.object = arg1;
+				break;
 			}
 			sc.cmd = getQuote(s);
 			snmpQue.push_back(sc);
 			return;
 		}
-	}else if (tmpsection == CWEATHER)
-	{
-		if (cmd == "start")
+		if (cmd == "set")
 		{
-			if (!weather)
+			if (!snmp)
 			{
-				weather = new Weather(hEvent[CWEATHER]);
-				weather->debug = weatherDebug;
-				weather->astroAddress = astroUrl;
-				weather->forecastAddress = forecastUrl;
-				weather->start();
-			}
-			return;
-		}
-		if (cmd == "stop")
-		{
-			if (weather)
-				delete weather;
-			weather = NULL;
-			return;
-		}
-		if (cmd == "debug")
-		{
-			weatherDebug = booleanString(getWord(s, next++));
-			if (weather)
-				weather->debug = weatherDebug;
-			return;
-		}
-		if (cmd == "astrourl")
-		{
-			astroUrl = getWord(s, next++);
-			if (weather)
-				weather->astroAddress = astroUrl;
-			return;
-		}
-		if (cmd == "forecasturl")
-		{
-			forecastUrl = getWord(s, next++);
-			if (weather)
-				weather->forecastAddress = forecastUrl;
-			return;
-		}
-		if (cmd == "get")
-		{
-			if (!weather)
-			{
-				cout << "Vær agent kjørier ikke." << endl;
+				cout << "SNMP Manager kjørier ikke." << endl;
 				return;
 			}
+			DWORD ip = 0;
 			arg1 = getWord(s, next++);
 			arg2 = getWord(s, next++);
-			list<LocationMap>::iterator it = locationList.begin();
-			double lat = 0.0;
-			double lon = 0.0;
-			while (it != locationList.end())
+			arg3 = getWord(s, next++);
+			if (isNumber(arg1))
 			{
-				if (it->name == arg2)
+				ip = atoip(arg1);
+			}	else
+			{
+				list<StationMap>::iterator it = stationList.begin();
+				while (it != stationList.end())
 				{
-					lat = it->latitude;
-					lon = it->longitude;
-					break;
+					if (it->name == arg1)
+					{
+						if (!it->ip.empty())
+							ip = it->ip.front();
+						break;
+					}
+					++it;
 				}
-				++it;
 			}
-			if ((lat == 0.0) || (lon == 0.0))
-			{
-				cerr << "Latitude/Longitude er ikke angitt." << endl;
-				return;
-			}
-			if (arg1 == "astro")
-			{
-				AstroRequest aReq;
-				aReq.altitude = -1;
-				aReq.latitude = lat;
-				aReq.longitude = lon;
-				GetLocalTime(&aReq.date);
-				weather->addRequest(aReq);
-			}else if (arg1 == "forecast")
-			{
-				WeatherRequest wReq;
-				wReq.altitude = 0;
-				wReq.latitude = lat;
-				wReq.longitude = lon;
-				weather->addRequest(wReq);
-			}
-			return;
-		}
-		if (cmd == "rec")
-		{
-			WeatherCommand wc;
-			wc.location = getWord(s, next++);
-			wc.type = getWord(s, next++);
-			wc.cmd = getQuote(s);
-			weatherQue.push_back(wc);
+			if (!snmp->set(ip, arg2, arg3))
+				cerr << "Syntax: set <ip|station> <objekt> <value>" << endl;
 			return;
 		}
 	}
@@ -556,6 +475,24 @@ void response()
 
 void handleIEC104Event(APDU& apdu)
 {
+	int type = apdu.asdu.dui.ident;
+	int IOA = apdu.asdu.io[0].address;
+	int value = apdu.asdu.io[0].dco.DCS;
+	if (logging)
+		cout << "i104: Type: " << type << " IOA: " << IOA << " = " << value << endl;
+	std::list<IECCommand>::iterator it = iecQue.begin();
+	std::string cmd;
+	while (it != iecQue.end())
+	{
+		if ((it->ioa == IOA) && (it->val == value))
+		{
+			if (logging)
+				cout << it->cmd << endl;
+			doCommand(it->cmd);
+			return;
+		}
+		++it;
+	}
 }
 
 void checkSNMPEvent(std::string station, SNMPTelegram& t)
@@ -604,7 +541,9 @@ void handleSNMPEvent(std::string station, SNMPTelegram& t)
 	{
 		char sz[16];
 		string s="SNMP> ";
-		s += station;
+		_itoa_s(t.type, sz, 16, 10);
+		s += "PDU:" + string(sz);
+		s += " " + station;
 		if (t.type==PDU_TRAP1)
 		{
 			_itoa_s(t.genericTrap,sz,16,10);
@@ -649,113 +588,6 @@ std::string getStationName(DWORD ip)
 	return iptoa(ip);
 }
 
-std::string getLocation(MetAstroLocation mal)
-{
-	list<LocationMap>::iterator lmIt = locationList.begin();
-	while (lmIt != locationList.end())
-	{
-		if ((lmIt->latitude == mal.latitude) && (lmIt->longitude == mal.longitude))
-			return lmIt->name;
-		++lmIt;
-	}
-	return "";
-}
-
-std::string getLocation(MetWeatherLocation mwl)
-{
-	list<LocationMap>::iterator lmIt = locationList.begin();
-	while (lmIt != locationList.end())
-	{
-		if ((lmIt->latitude == mwl.latitude) && (lmIt->longitude == mwl.longitude))
-			return lmIt->name;
-		++lmIt;
-	}
-	return "";
-}
-
-void checkWeatherEvent(std::string location, std::string type, std::string value)
-{
-	std::list<WeatherCommand>::iterator wcIt = weatherQue.begin();
-	std::string cmd;
-	string::size_type e;
-	while (wcIt != weatherQue.end())
-	{
-		if ((wcIt->location == location) && (wcIt->type == type))
-		{
-			cmd = wcIt->cmd;
-			e = cmd.find("<value>");
-			if (e != string::npos)
-				cmd.replace(e, 7, value);
-			if (logging)
-				cout << cmd << endl;
-			doCommand(cmd);
-			return;
-		}
-		++wcIt;
-	}
-}
-
-void handleAstroEvent(MetAstroData mad)
-{
-	MetAstroLocation ml;
-	std::string location;
-	if (!mad.getCurrentLocation(ml))
-		return;
-	location = getLocation(ml);
-	if (location == "")
-		return;
-
-	checkWeatherEvent(location, "sun", (mad.isSunNow(ml) ? "1" : "0"));
-}
-
-void handleWeatherEvent(MetWeatherData mwd)
-{
-	MetWeatherLocation wl;
-	std::string location;
-	std::string val;
-	if (!mwd.getCurrentLocation(wl))
-		return;
-	location = getLocation(wl);
-	if (location == "")
-		return;
-	if (wl.bCloudiness)
-		checkWeatherEvent(location, "cloudiness", ftoa(float(wl.cloudiness)));
-	if (wl.bFog)
-		checkWeatherEvent(location, "fog", ftoa(float(wl.fog)));
-	if (wl.bHighClouds)
-		checkWeatherEvent(location, "highClouds", ftoa(float(wl.highClouds)));
-	if (wl.bHumidity)
-		checkWeatherEvent(location, "humidity", ftoa(float(wl.humidity)));
-	if (wl.bLowClouds)
-		checkWeatherEvent(location, "lowClouds", ftoa(float(wl.lowClouds)));
-	if (wl.bMediumClouds)
-		checkWeatherEvent(location, "mediumClouds", ftoa(float(wl.mediumClouds)));
-	if (wl.bPrecipitation)
-		checkWeatherEvent(location, "precipitation", ftoa(float(wl.precipitation)));
-	if (wl.bPressure)
-		checkWeatherEvent(location, "pressure", ftoa(float(wl.pressure)));
-	if (wl.bSymbol)
-		checkWeatherEvent(location, "symbol", ftoa(float(wl.symbol)));
-	if (wl.bTemperature)
-		checkWeatherEvent(location, "temperature", ftoa(float(wl.temperature)));
-	if (wl.bWindDirection)
-		checkWeatherEvent(location, "windDirection", ftoa(float(wl.windDirection)));
-	if (wl.bWindSpeed)
-		checkWeatherEvent(location, "windSpeed", ftoa(float(wl.windSpeed)));
-	if (wl.bDewpointTemperature)
-		checkWeatherEvent(location, "dewpointTemperature", ftoa(float(wl.dewpointTemperature)));
-	if (wl.bTemperatureProbability)
-		checkWeatherEvent(location, "temperatureProbability", ftoa(float(wl.temperatureProbability)));
-	if (wl.bWindProbability)
-		checkWeatherEvent(location, "windProbability", ftoa(float(wl.windProbability)));
-	if (wl.bPrecipitationMax)
-		checkWeatherEvent(location, "precipitationMax", ftoa(float(wl.precipitationMax)));
-	if (wl.bPrecipitationMin)
-		checkWeatherEvent(location, "precipitationMin", ftoa(float(wl.precipitationMin)));
-	if (wl.bSymbolProbability)
-		checkWeatherEvent(location, "symbolProbability", ftoa(float(wl.symbolProbability)));
-}
-
 void start(std::string ini)
 {
 
@@ -771,19 +603,14 @@ void start(std::string ini)
 	snmpQue.clear();
 	responseQue.clear();
 	stationList.clear();
-	locationList.clear();
-	weatherQue.clear();
 
 	snmpPort = 161;
 	snmpDebug = false;
 	i104Debug = false;
 	i104CA = 1;
-	weatherDebug = false;
-	forecastUrl.clear();
-	astroUrl.clear();
 
 	// Sett opp Events som lyttes på i hovedløkka (run()).
-	for (i = 1; i < 4; i++)
+	for (i = 1; i < 3; i++)
 		hEvent[i] = CreateEvent(NULL, FALSE, FALSE, NULL);
 
 	// Initier WinSock
@@ -814,16 +641,13 @@ void start(std::string ini)
 void stop()
 {
 	int i;
-	if (weather)
-		delete weather;
 	if (snmp)
 		delete snmp;
 	if(iec104)
 		delete iec104;
-	weather = NULL;
 	snmp = NULL;
 	iec104 = NULL;
-	for (i = 1; i < 4; i++)
+	for (i = 1; i < 3; i++)
 		CloseHandle(hEvent[i]);
 	WSACleanup();
 };
@@ -836,12 +660,10 @@ bool run()
 	string s;
 	APDU apdu;
 	SNMPTelegram snmpT;
-	MetAstroData mad;
-	MetWeatherData mwd;
 
 	while (1)
 	{
-		dw = WaitForMultipleObjects(4, hEvent, FALSE, 100);
+		dw = WaitForMultipleObjects(3, hEvent, FALSE, 100);
 		switch (dw)
 		{
 			case WAIT_CONSOLE: // Kommandoer fra konsolle
@@ -866,16 +688,6 @@ bool run()
 				// Sjekk om stasjonen er definert
 				s = getStationName(snmpT.ip);
 				handleSNMPEvent(s, snmpT);
-			}
-			break;
-		case WAIT_WEATHER:
-			while (weather->read(mad))
-			{
-				handleAstroEvent(mad);
-			}
-			while (weather->read(mwd))
-			{
-				handleWeatherEvent(mwd);
 			}
 			break;
 		case WAIT_TIMEOUT:

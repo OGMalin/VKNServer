@@ -45,12 +45,6 @@
     <ClCompile Include="SNMP.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="Weather.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="XML.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="Console.h">
@@ -78,12 +72,6 @@
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="SNMP.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="Weather.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="XML.h">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>

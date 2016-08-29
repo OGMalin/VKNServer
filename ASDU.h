@@ -40,7 +40,7 @@
 #define COT_SPONTANEOUS						3
 #define COT_INITIALISED						4
 #define COT_REQUEST								5
-#define COT_ACTIVATION						6
+#define COT_ACTIVATION					  6
 #define COT_ACTIVATIONCONFIRM			7
 #define COT_DEACTIVATION					8
 #define COT_DEACTIVATIONCONFIRM		9
@@ -49,6 +49,11 @@
 #define COT_LOCALCOMMAND					12
 #define COT_FILETRANSFER					13
 #define COT_INTERROGATION					20
+#define COT_UNKNOWNTYPE						44
+#define COT_UNKNOWNCAUSE					45
+#define COT_UNKNOWNCOMMON					46
+#define COT_UNKNOWNINFORMATION		47 
+
 
 // Qualifier of interrogation
 #define QOI_STATION_INTERROGATION	20
@@ -56,31 +61,68 @@
 #define BROADCAST									0xff
 
 // ASDU typer i bruk av NUC pluss 104 typer
+// Prosessinformasjon fra RTU
 #define M_SP_NA_1				1		// Single-point information
 #define M_DP_NA_1				3		// Double-point information
 #define M_ST_NA_1				5		// Step position information
 #define M_BO_NA_1				7		// Bitstring of 32 bit
 #define M_ME_NA_1				9		// Measured value, normalized value
+#define M_ME_NB_1				11	// Measured value, scaled value
 #define M_ME_NC_1				13	// Measured value, short floating point value		
+#define M_IT_NA_1				15	// Integrated totals
+#define M_PS_NA_1				20	// Packed single-point information with status change detection
+#define M_ME_ND_1				21	// Measured value, normalized value without quality descriptor
 #define M_SP_TB_1				30	// Single-point information with time tag CP56Time2a
 #define M_DP_TB_1				31	// Double-point information with time tag CP56Time2a
 #define M_ST_TB_1				32	// Step position information with time tag CP56Time2a
+#define M_BO_TB_1				33	// Bitstring of 32 bit with time tag CP56Time2a
 #define M_ME_TD_1				34	// Measured value, normalized value with time tag CP56Time2a
+#define M_ME_TE_1				35	// Measured value, scaled value with time tag CP56Time2a
 #define M_ME_TF_1				36	// Measured value, short floating point value with time tag CP56Time2a
 #define M_IT_TB_1				37	// Integrated totals value with time tag CP56Time2a
+#define M_EP_TD_1				38	// Event of protection equipment with time tag CP56Time2a
+#define M_EP_TE_1				39	// Packed start events of protection equipment with time tag CP56Time2a
+#define M_EP_TF_1				40	// Packed output circuit information of protection equipment with time tag CP56Time2a
+// Prosessinformasjon til RTU
 #define C_SC_NA_1				45	// Single command
 #define C_DC_NA_1				46	// Double command
 #define C_RC_NA_1				47	// Regulating step command
 #define C_SE_NA_1				48	// Set point command, normalised value
+#define C_SE_NB_1				49	// Set point command, scaled value
+#define C_SE_NC_1				50	// Set point command, short floating point value
 #define C_BO_NA_1				51	// Bitstring of 32 bit
 #define C_SC_TA_1				58	// Single command with time tag CP56Time2a
 #define C_DC_TA_1				59	// Double command with time tag CP56Time2a
+#define C_RC_TA_1				60	// Regulating step command with time tag CP56Time2a
+#define C_SE_TA_1				61	// Set point command, normalised value with time tag CP56Time2a
+#define C_SE_TB_1				62	// Set point command, scaled value with time tag CP56Time2a
+#define C_SE_TC_1				63	// Set point command, short floating point value with time tag CP56Time2a
+#define C_BO_TA_1				64	// Bitstring of 32 bit with time tag CP56Time2a
+// Systeminformasjon fra RTU
 #define M_EI_NA_1				70	// End of initialization
+// Systeminformasjon til RTU
 #define C_IC_NA_1				100	// Interrrogation command
 #define C_CI_NA_1				101	// Counter interrrogation command
+#define C_RD_NA_1				102	// Read command
 #define C_CS_NA_1				103	// Clock syncronization command
 #define C_TS_NB_1				104	// Test command
 #define C_RP_NC_1				105	// Reset process command
+#define C_CD_NA_1				106	// Delayed acquistion command
+#define C_TS_TA_1				107	// Test command with time tag CP56Time2a
+// Parameter til RTU
+#define P_ME_NA_1				110	// Parameter of measured value, normalized value
+#define P_ME_NB_1				111	// Parameter of measured value, scaled value
+#define P_ME_NC_1				112	// Parameter of measured value, short floating-point number
+#define P_AC_NA_1				113	// Parameter activation
+// Filoverføring
+#define F_FR_NA_1				120	// File ready
+#define F_SR_NA_1				121	// Section ready
+#define F_SC_NA_1				122	// Call directory, select file, call file, call section
+#define F_LS_NA_1				123	// Last section, last segment
+#define F_AF_NA_1				124	// Ack file, ack section
+#define F_SG_NA_1				125	// Segment
+#define F_DR_TA_1				126	// Directory
+#define F_SC_NB_1				127	// Query Log - Request archive file
 
 #define DPI_INTERMEDIATE					0
 #define DPI_OFF										1

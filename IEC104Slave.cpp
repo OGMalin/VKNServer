@@ -1,4 +1,7 @@
+#define _WINSOCK_DEPRECATED_NO_WARNINGS
+
 #include <WinSock2.h>
+#include <WS2tcpip.h>
 #include <Windows.h>
 #include <process.h>
 #include <iostream>
@@ -18,16 +21,17 @@ IEC104Slave::IEC104Slave(HANDLE event)
 	abort=false;
 	OkToSend=false;
 	commonaddress=1;
-	port=2404; // Standard port for IEC 104 kommunikasjon
+	port="2404"; // Standard port for IEC 104 kommunikasjon
 	slaveIp=INADDR_ANY; // Velg hvilken egen ip som skal brukes, default er alle definerte.
 	hThread=NULL;
-	currentSSN=currentRSN=0;
+	slaveSN=masterSN=0;
 	// Lag en event som 'main' kan lytte på når noe skal sendes til andre funksjoner (kommando).
 	hEvent=event;
 	InitializeCriticalSection(&IEC104SlaveCSWrite);
 	InitializeCriticalSection(&IEC104SlaveCSRead);
 	InitializeCriticalSection(&IEC104SlaveCSSpool);
 	InitializeCriticalSection(&IEC104SlaveCSValue);
+	clientSocket = INVALID_SOCKET;
 }
 
 IEC104Slave::~IEC104Slave()
@@ -45,36 +49,9 @@ bool IEC104Slave::start()
 	if (hThread)
 		return false;
 
-	sockaddr_in slaveAddr;
+//	sockaddr_in slaveAddr;
 	abort=false;
-
-	// Lag en nettverk socket med ipv4 og tcp
-	if ((slaveSocket=socket(AF_INET, SOCK_STREAM, IPPROTO_TCP)) < 0)
-	{
-		cout << "socket() feilet." << endl;
-		return false;
-	}
-
-	// Velg hvilken IP og port som skal brukes.
-	memset(&slaveAddr, 0, sizeof(slaveAddr));
-	slaveAddr.sin_family = AF_INET;
-	slaveAddr.sin_addr.s_addr = htonl(slaveIp);
-	slaveAddr.sin_port = htons(port);
-
-	if (bind(slaveSocket, (struct sockaddr*) &slaveAddr, sizeof(slaveAddr)) < 0)
-	{
-		cout << "bind() feilet." << endl;
-		return false;
-	}
-
-	// Forbered for innkommende anrop
-	if (listen(slaveSocket,5) <0)
-	{
-		cout << "listen() feilet." << endl;
-		return false;
-	}
-
-	cout << "IEC104Slave startet, Ip: " << inet_ntoa(slaveAddr.sin_addr) << " Port: " << port << endl;
+	OkToSend = false;
 
   hThread=(HANDLE)_beginthread(IEC104Slave::threadLoop,0,this);
   if ((int)hThread==-1)
@@ -108,10 +85,8 @@ void IEC104Slave::stop()
 		if (WaitForSingleObject(hThread, 1000) == WAIT_TIMEOUT)
 			TerminateThread(hThread,0);
 		hThread=NULL;
-		if (masterSocket!=-1)
-			closesocket(masterSocket);
-		if (slaveSocket != -1)
-			closesocket(slaveSocket);
+		if (clientSocket!=INVALID_SOCKET)
+			closesocket(clientSocket);
 
 	}
 }
@@ -127,21 +102,33 @@ void IEC104Slave::input(BYTE* data)
 	apdu.set(data);
 	if (!apdu.valid())
 		return;
-
 	switch (apdu.apci.format)
 	{
 		case I_FORMAT:
+			if (masterSN != apdu.apci.ssn)
+				cerr << "IEC: Feil master sequencenumber." << " Expected: " << masterSN << " got: " << apdu.apci.ssn << endl;
+			masterSN++;
 			switch (apdu.asdu.dui.ident)
 			{
-				case C_SC_NA_1:
+				case C_SC_NA_1: // Enkel kommando
+				case C_DC_NA_1: // Dobbel kommando
+				case C_RC_NA_1: // Regulering
+				case C_SC_TA_1: // Enkel kommando med tid
+				case C_DC_TA_1: // Dobbel kommando med tid
+				case C_RC_TA_1: // Regulerering med tid
+					if (apdu.asdu.io.size() != 1)
+						break;
+					EnterCriticalSection(&IEC104SlaveCSRead);
+					inQue.push(apdu);
+					LeaveCriticalSection(&IEC104SlaveCSRead);
+					SetEvent(hEvent);
+					res.setAPCI(I_FORMAT);
+					res.setDUI(commonaddress, apdu.asdu.dui.ident, COT_ACTIVATIONCONFIRM);
+					inf = apdu.asdu.io[0];
+					res.addIO(inf);
+					OkToSend ? write(res) : spool(res);
 					break;
-				case C_DC_NA_1:
-					break;
-				case C_SC_TA_1:
-					break;
-				case C_DC_TA_1:
-					break;
-				case C_IC_NA_1:
+				case C_IC_NA_1: // Interrogation
 					res.setAPCI(I_FORMAT);
 					res.setDUI(commonaddress, C_IC_NA_1,COT_ACTIVATIONCONFIRM);
 					inf.address=0;
@@ -158,19 +145,22 @@ void IEC104Slave::input(BYTE* data)
 					res.addIO(inf);
 					OkToSend?write(res):spool(res);
 					break;
-				case C_CI_NA_1:
+				case C_CI_NA_1: // Counter interrogation
 					break;
-				case C_CS_NA_1:
-					// Klokke synkronisering.
+				case C_CS_NA_1: // Klokke synkronisering.
+					res.setAPCI(I_FORMAT);
+					res.setDUI(commonaddress, C_CS_NA_1, COT_ACTIVATIONCONFIRM);
+					inf.address = 0;
+					inf.cp56time = currentTime();
+					res.addIO(inf);
+					OkToSend ? write(res) : spool(res);
 					break;
 			}
-			currentRSN=apdu.apci.ssn+1;
 			break;
 		case S_FORMAT:
-//			if (currentSSN!=apdu.apci.rsn)
-//			{
-//				
-//			}
+			if (((int)slaveSN > apdu.apci.rsn + 2) || ((int)slaveSN < apdu.apci.rsn))
+				cerr << "IEC: Feil slave sequencenumber." << " Expected: " << slaveSN << " got: " << apdu.apci.rsn << endl;
+//			masterSN++;
 			break;
 		case U_FORMAT:
 			res.apci.format=U_FORMAT;
@@ -194,13 +184,6 @@ void IEC104Slave::input(BYTE* data)
 			}
 			break;
 	}
-	/* For kommandoer etc. 
-	EnterCriticalSection(&IEC104SlaveCS);
-	inQue.push_back(apdu);
-	LeaveCriticalSection(&IEC104SlaveCS);
-	SetEvent(hEvent);
-	*/
-
 }
 
 bool IEC104Slave::read(APDU& apdu)
@@ -221,12 +204,14 @@ bool IEC104Slave::write(APDU& apdu)
 {
 	BYTE data[255];
 	int len;
-	if (!masterSocket)
+	if (!clientSocket)
 		return false;
 	if (apdu.apci.format==I_FORMAT)
 	{
-		apdu.apci.ssn=currentSSN++;
-		apdu.apci.rsn=currentRSN;
+		apdu.apci.ssn = slaveSN++;
+		apdu.apci.rsn = masterSN;
+		if (slaveSN > 32767)
+			slaveSN = 0;
 	}
 	len=apdu.get(data);
 	if (len)
@@ -243,7 +228,7 @@ bool IEC104Slave::write(APDU& apdu)
 
 		if (debug)
 			cerr << makeHexString(data,len) << endl;
-		send(masterSocket,(char*)data,len,0);
+		send(clientSocket, (char*)data, len, 0);
 		LeaveCriticalSection(&IEC104SlaveCSWrite);
 	}
 	return true;
@@ -252,39 +237,110 @@ bool IEC104Slave::write(APDU& apdu)
 
 void IEC104Slave::threadLoop(void* lpv)
 {
-	int masterLen;
-	int recvLen;
-	sockaddr_in masterAddr;
-	BYTE data[255];
+	int iResult;
+	SOCKET listenSocket=INVALID_SOCKET;
+
+	struct addrinfo *result = NULL;
+	struct addrinfo hints;
+
+	char recvbuf[512];
+	int recvbuflen = 512;
+
   IEC104Slave* slave=(IEC104Slave*)lpv;
-	slave->masterSocket=-1;
+
 	while (!slave->abort)
 	{
-		masterLen=sizeof(masterAddr);
-		// Vent på anrop
-		if ((slave->masterSocket = accept(slave->slaveSocket, (struct sockaddr*) & masterAddr, (int*)&masterLen)) < 0)
+		slave->emptyQues();
+		slave->OkToSend = false;
+		slave->masterSN = slave->slaveSN = 0;
+		slave->clientSocket = INVALID_SOCKET;
+		listenSocket = INVALID_SOCKET;
+
+		ZeroMemory(&hints, sizeof(hints));
+		hints.ai_family = AF_INET;
+		hints.ai_socktype = SOCK_STREAM;
+		hints.ai_protocol = IPPROTO_TCP;
+		hints.ai_flags = AI_PASSIVE;
+
+		iResult = getaddrinfo(NULL, slave->port.c_str(), &hints, &result);
+		if (iResult != 0)
 		{
-			cerr << "IEC104: accept() feilet." << endl;
+			cerr << "IEC104: getaddrinfo feilet." << endl;
 			break;
 		}
 
-		cout << "IEC104 koplet til " << inet_ntoa(masterAddr.sin_addr) << endl;
-		recvLen=1;
-		while (recvLen>0)
+		listenSocket = socket(result->ai_family, result->ai_socktype, result->ai_protocol);
+		if (listenSocket == INVALID_SOCKET)
 		{
-			if ((recvLen=recv(slave->masterSocket, (char*)data, 255, 0)) < 0)
+			freeaddrinfo(result);
+			cerr << "IEC104: Feilet i listenSocket = socket(...)" << endl;
+			break;
+		}
+
+		iResult = bind(listenSocket, result->ai_addr, (int)result->ai_addrlen);
+		if (iResult == SOCKET_ERROR)
+		{
+			cerr << "IEC104: Feilet med bind:" << endl;
+			freeaddrinfo(result);
+			closesocket(listenSocket);
+			break;
+		}
+
+		freeaddrinfo(result);
+
+		iResult = listen(listenSocket, SOMAXCONN);
+		if (iResult == SOCKET_ERROR)
+		{
+			cerr << "IEC104: Feilet med listen:" << endl;
+			closesocket(listenSocket);
+			break;
+		}
+
+		// Vent på anrop
+		slave->clientSocket = accept(listenSocket, NULL, NULL);
+		if (slave->clientSocket==INVALID_SOCKET)
+		{
+			cerr << "IEC104: accept() feilet." << endl;
+			closesocket(listenSocket);
+			break;
+		}
+
+		closesocket(listenSocket);
+
+		cout << "IEC104 tilkoplet. " << endl;
+
+		do
+		{
+			iResult = recv(slave->clientSocket, recvbuf, recvbuflen, 0);
+			if (iResult>0)
+			{
+				if (slave->debug)
+					cerr << makeHexString((BYTE*)recvbuf, iResult) << endl;
+				slave->input((BYTE*)recvbuf);
+			}
+			else if (iResult == 0)
+			{
+				cerr << "IEC104: Lukke forbindelsen." << endl;
+			}else
 			{
 				cerr << "IEC104: recv() feilet." << endl;
+				closesocket(slave->clientSocket);
 				break;
 			}
 
-			if (slave->debug)
-				cerr << makeHexString(data,recvLen) << endl;
-			slave->input(data);
+		} while (iResult > 0);
+
+		iResult = shutdown(slave->clientSocket, SD_SEND);
+		if (iResult == SOCKET_ERROR)
+		{
+			cerr << "IEC104: shutdown feilet." << endl;
+			closesocket(slave->clientSocket);
+			break;
 		}
-		closesocket(slave->masterSocket);
-		slave->masterSocket=-1;
+		closesocket(slave->clientSocket);
+		slave->clientSocket = INVALID_SOCKET;
 	}
+	slave->OkToSend = false;
   _endthread();
 }
 
@@ -661,4 +717,14 @@ void IEC104Slave::sendInterrogation()
 				write(apdu);
 
 	LeaveCriticalSection(&IEC104SlaveCSValue);
+}
+
+void IEC104Slave::emptyQues()
+{
+	EnterCriticalSection(&IEC104SlaveCSSpool);
+	outQue.clear();
+	LeaveCriticalSection(&IEC104SlaveCSSpool);
+	EnterCriticalSection(&IEC104SlaveCSWrite);
+	sendQue.clear();
+	LeaveCriticalSection(&IEC104SlaveCSWrite);
 }

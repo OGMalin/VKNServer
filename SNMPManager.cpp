@@ -1,3 +1,5 @@
+#define _WINSOCK_DEPRECATED_NO_WARNINGS
+
 #include <WinSock2.h>
 #include <Windows.h>
 #include <process.h>
@@ -326,6 +328,79 @@ void SNMPManager::getRequest(DWORD ip, std::string object, std::string value, in
 	send(ip,data,len);
 }
 
+void SNMPManager::setRequest(DWORD ip, std::string object, std::string value, int version, std::string community)
+{
+	ASN asn;
+	ASN ver;
+	ASN com;
+	ASN pdu;
+	ASN recid;
+	ASN errstat;
+	ASN errind;
+	ASN bnd;
+	ASN var;
+	ASN obj;
+	ASN val;
+
+	// Sett objektet det spørres om
+	obj.set(ASN_OBJECTIDENTIFIER, object);
+	if (lowercase(value) == "null")
+	{
+		val.set(ASN_NULL, 0);
+	}else
+	{
+		if (isNumber(value))
+			val.set(ASN_INTEGER, value);
+		else
+			val.set(ASN_OCTETSTRING, value);
+	}
+	// Legg det til en variabel
+	var.set(ASN_SEQUENCE);
+	var.add(obj);
+	var.add(val);
+
+	// Legg alle variabler inn i en binding
+	bnd.set(ASN_SEQUENCE);
+	bnd.add(var);
+
+	// Errorkode
+	errind.set(ASN_INTEGER, 0);
+
+	// Error status
+	errstat.set(ASN_INTEGER, 0);
+
+	// Request id
+	if (requestId >= MAXINT)
+		requestId = 1;
+	else
+		requestId++;
+	recid.set(ASN_INTEGER, requestId++);
+
+	// Legg det inn i en pdu
+	pdu.set(ASN_CONTEXTSPECIFIC, ASN_CONSTRUCTED, PDU_SETREQUEST);
+	pdu.add(recid);
+	pdu.add(errstat);
+	pdu.add(errind);
+	pdu.add(bnd);
+
+	// Community string
+	com.set(ASN_OCTETSTRING, community);
+
+	// Trap versjon
+	ver.set(ASN_INTEGER, (version - 1));
+
+	asn.set(ASN_SEQUENCE);
+	asn.add(ver);
+	asn.add(com);
+	asn.add(pdu);
+
+	BYTE data[512];
+	int len = asn.get(data);
+	if (debug)
+		cout << "SNMP< " << makeHexString(data, len) << endl;
+	send(ip, data, len);
+}
+
 bool SNMPManager::get(DWORD ip, std::string obj)
 {
 	if (!running)
@@ -337,5 +412,19 @@ bool SNMPManager::get(DWORD ip, std::string obj)
 	if (!isNumber(obj))
 		return false;
 	getRequest(ip,obj);
+	return true;
+}
+
+bool SNMPManager::set(DWORD ip, std::string obj, std::string val)
+{
+	if (!running)
+		return false;
+	if (ip == 0)
+		return false;
+	if (obj.empty())
+		return false;
+	if (!isNumber(obj))
+		return false;
+	setRequest(ip, obj, val);
 	return true;
 }
