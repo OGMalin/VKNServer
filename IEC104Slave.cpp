@@ -127,6 +127,12 @@ void IEC104Slave::input(BYTE* data)
 					inf = apdu.asdu.io[0];
 					res.addIO(inf);
 					OkToSend ? write(res) : spool(res);
+					res.clear();
+					res.setAPCI(I_FORMAT);
+					res.setDUI(commonaddress, apdu.asdu.dui.ident, COT_ACTIVATIONTERMINATION);
+					inf = apdu.asdu.io[0];
+					res.addIO(inf);
+					OkToSend ? write(res) : spool(res);
 					break;
 				case C_IC_NA_1: // Interrogation
 					res.setAPCI(I_FORMAT);
