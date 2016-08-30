@@ -236,6 +236,7 @@ bool IEC104Slave::write(APDU& apdu)
 			cerr << makeHexString(data,len) << endl;
 		send(clientSocket, (char*)data, len, 0);
 		LeaveCriticalSection(&IEC104SlaveCSWrite);
+		Sleep(30); // Venter 30 msec slik at meldingene ikke kommer for tett. (spessielt svar på IC)
 	}
 	return true;
 }
@@ -556,7 +557,7 @@ void IEC104Slave::setDpi(int ident, int addr, int dpi)
 	{
 		IECValue v;
 		v.id=addr;
-		v.type=M_SP_NA_1;
+		v.type=M_DP_NA_1;
 		v.nVal=dpi;
 		stored.push_back(v);
 	}
