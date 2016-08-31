@@ -105,8 +105,8 @@ void IEC104Slave::input(BYTE* data)
 	switch (apdu.apci.format)
 	{
 		case I_FORMAT:
-			if (masterSN != apdu.apci.ssn)
-				cerr << "IEC: Feil master sequencenumber." << " Expected: " << masterSN << " got: " << apdu.apci.ssn << endl;
+//			if (masterSN != apdu.apci.ssn)
+//				cerr << "IEC: Feil master sequencenumber." << " Expected: " << masterSN << " got: " << apdu.apci.ssn << endl;
 			masterSN++;
 			switch (apdu.asdu.dui.ident)
 			{
@@ -164,9 +164,8 @@ void IEC104Slave::input(BYTE* data)
 			}
 			break;
 		case S_FORMAT:
-			if (((int)slaveSN > apdu.apci.rsn + 2) || ((int)slaveSN < apdu.apci.rsn))
-				cerr << "IEC: Feil slave sequencenumber." << " Expected: " << slaveSN << " got: " << apdu.apci.rsn << endl;
-//			masterSN++;
+//			if (((int)slaveSN > apdu.apci.rsn + 2) || ((int)slaveSN < apdu.apci.rsn))
+//				cerr << "IEC: Feil slave sequencenumber." << " Expected: " << slaveSN << " got: " << apdu.apci.rsn << endl;
 			break;
 		case U_FORMAT:
 			res.apci.format=U_FORMAT;
@@ -327,12 +326,10 @@ void IEC104Slave::threadLoop(void* lpv)
 			}
 			else if (iResult == 0)
 			{
-				cerr << "IEC104: Lukke forbindelsen." << endl;
+				cerr << "IEC104: Lukker forbindelsen." << endl;
 			}else
 			{
-				cerr << "IEC104: recv() feilet." << endl;
-				closesocket(slave->clientSocket);
-				break;
+				cerr << "IEC104: recv() feilet. Error: " << WSAGetLastError() << endl;
 			}
 
 		} while (iResult > 0);
