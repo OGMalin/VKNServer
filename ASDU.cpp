@@ -241,7 +241,8 @@ const CP56Time2a currentTime()
 {
 	CP56Time2a cp;
 	SYSTEMTIME st;
-	GetLocalTime(&st);
+//	GetLocalTime(&st);
+	GetSystemTime(&st);
 	cp.y=st.wYear-2000;
 	cp.m=st.wMonth;
 	cp.d=st.wDay;
