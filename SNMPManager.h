@@ -38,7 +38,7 @@ public:
 	void stop();
 	bool read(SNMPTelegram& t);
 	void getRequest(DWORD ip, std::string object, std::string value="NULL", int version=1, std::string community="public");
-	void setRequest(DWORD ip, std::string object, std::string value = "NULL", int version = 1, std::string community = "public");
+	void setRequest(DWORD ip, std::string object, std::string value = "NULL", int version = 1, std::string community = "private");
 	void send(DWORD ip, BYTE* data, int len);
 	static void trapLoop(void* lpv);
 	static void responseLoop(void* lpv);
